@@ -1,0 +1,95 @@
+# ── 战争雷霆聊天翻译 · 配置 ─────────────────────────────────────────
+
+llm:
+  # 任何 OpenAI 兼容端点：DeepSeek / 硅基流动 / Kimi / GLM / OpenAI 都行
+  # DeepSeek 示例： https://api.deepseek.com/v1        模型 deepseek-chat
+  # 硅基流动示例：  https://api.siliconflow.cn/v1      模型 Qwen/Qwen3-8B
+  # Kimi 示例：     https://api.moonshot.cn/v1         模型 moonshot-v1-8k
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+
+  # 密钥两种给法，二选一：
+  #   1) 直接填下面这行（文件在本地，方便但会落盘）
+  #   2) 留空，改设环境变量，变量名见 api_key_env（推荐）
+  api_key: ""
+  api_key_env: "WT_LLM_KEY"
+
+  timeout: 8          # 单次请求超时（秒）
+  retries: 2          # 429/5xx 重试次数
+  temperature: 0.1
+
+  # 可选备用通道：主通道连续失败时切换
+  fallback:
+    enabled: false
+    base_url: ""
+    model: ""
+    api_key_env: ""
+
+  # 中译英单独走 FLASH 通道：不赶时间，但要求少思考、少花钱
+  zh2en:
+    enabled: true
+    base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    model: "deepseek-v4.1-flash-1017"
+    api_key: ""
+    api_key_env: "WT_ZH2EN_KEY"
+    temperature: 0.7
+    max_tokens: 200
+    timeout: 20
+    # 思考强度。实测（同一句子，同一模型）：
+    #   什么都不传 → 3.10s，带 319 字思考，completion 151 token
+    #   reasoning_effort: low → 1.66s，仍会思考
+    #   enable_thinking: false → 0.65s，无思考，completion 12 token  ← 采用这个
+    enable_thinking: false
+    reasoning_effort: ""       # 想保留低强度思考就填 "low"，并把上面改成不生效
+    extra: {}
+
+poll:
+  interval: 0.25      # 轮询间隔（秒）
+  http_timeout: 0.8   # 8111 请求超时；不在对局时拒连是常态
+  backoff: 1.0        # 拒连后的固定退避（不要指数退避，进对局要秒级恢复）
+
+queue:
+  max_lines: 5        # 单请求最多合并几条
+  max_wait: 0.35      # 正在等上一笔请求时，新消息最多再攒多久（秒）
+  grace: 0.06         # 空闲时只等这么短——同一次轮询进来的多条仍能合并
+  capacity: 30        # 队列上限，超出丢最旧
+  cache_size: 2000    # 译文 LRU 容量
+
+ui:
+  enabled: true
+  anchor: "left"     # left=贴屏幕左侧（游戏左下角）, right=贴右侧
+  width: 432         # 对齐游戏自带聊天框：物理 648px 宽
+  max_lines: 16       # 单行一条，靠高度上限裁剪
+  margin_x: 9         # 对齐游戏聊天框左边线：物理 14px
+  margin_y: 169       # 距屏幕底部物理 254px → 面板底边 1186，紧贴游戏聊天框上端(1187)
+  line_gap: 0         # 每条消息下方行距（逻辑）。行与行之间留空会在色键透明下露缝，故设 0
+  max_height: 249     # 逻辑像素高度上限，同时也是窗口固定高度（不再随消息数伸缩）
+  alpha: 0.41         # 仅背景黑带的不透明度（文字层始终 100%）。游戏实测 0.406
+  font_px: 17         # 字号，单位是物理像素。实测游戏聊天字高 13px / 行距 23px
+  idle_hide: 8.0      # 无新消息多少秒后自动隐藏
+  click_through: true # 鼠标穿透（强烈建议 true，否则右键视角会被窗口吃掉）
+
+privacy:
+  # 云端翻译意味着聊天内容会离开本机。设为 false 则只用词表、不联网。
+  allow_cloud: true
+
+# 中译英代发：按 Ctrl+F9 弹出输入框，回车后翻成英文并代你打出去
+compose:
+  enabled: true
+  mode: "clipboard"   # clipboard=只译好并复制，你按 Enter/Ctrl+V/Enter；inject=尝试自动打字
+                      # 实测这台机器上 inject 无效：游戏会丢弃合成按键
+  method: "type"      # inject 模式下的打字方式：type=逐字注入 / paste=剪贴板粘贴
+  press_enter: true   # inject 模式下自动回车发送
+  width: 520          # 输入框宽（逻辑像素，内部乘 1.5）
+  height: 92
+  x: 9                # 距屏幕左边
+  y: 440              # 距屏幕顶部（位于面板上方，不遮挡译文）
+
+# 局域网手机发送：手机上开网页输中文，电脑这边译成英文并代发
+web:
+  enabled: true
+  host: "0.0.0.0"     # 0.0.0.0 = 局域网内其他设备可访问
+  port: 8765
+  token: "0215"       # 固定 PIN；留空则每次启动随机生成（注意要加引号，否则 YAML 会当成八进制数）
+  mode: "clipboard"   # 同 compose.mode
+  press_enter: true

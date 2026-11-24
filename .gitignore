@@ -1,0 +1,22 @@
+# 运行时产物
+state.json
+state.json.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 个人本地配置（如果哪天需要放私密的东西）
+config.local.yaml
