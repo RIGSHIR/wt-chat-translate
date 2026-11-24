@@ -141,7 +141,7 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 
 1. 手机连**同一个 Wi-Fi**
 2. 浏览器打开 `http://<电脑IP>:8765/`（启动日志里有）
-3. 首次填 PIN（当前配置为 `0215`，存在浏览器本地，不用重复填）
+3. 首次填 PIN（启动日志里的 `[手机] PIN = xxxx`，每次重启会变；想固定就填 `web.token`）
 4. 输入中文点发送 → 手机显示英文译文 → 回游戏按三下键发出
 
 常用语有快捷胶囊（掩护我 / 小心后面 / 需要支援…），点一下直接填进输入框。
@@ -190,7 +190,7 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 |---|---|---|
 | `enabled` | true | 关掉则完全不启网页服务 |
 | `host` / `port` | `0.0.0.0` / 8765 | |
-| `token` | `"0215"` | **必须加引号**，否则 YAML 当八进制解析 |
+| `token` | `""` | 留空 = 每次启动随机 4 位；固定值**必须加引号**，否则 YAML 当八进制解析 |
 | `mode` | `clipboard` | 见下方 |
 
 ### compose.mode / web.mode
@@ -209,7 +209,7 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | 面板位置不对 | 多显示器 / 虚拟显示器 | 程序按游戏窗口所在屏定位；仍异常改 `margin_x/y` |
 | 字幕全是原文 | 没密钥 / 云端挂了 | 看日志里的 `[统计]` 和警告行 |
 | 手机打不开页面 | 防火墙 / 不在同一网段 | 检查第 7 步的规则；`ping` 一下电脑 IP |
-| 手机显示 PIN 不正确 | 服务重启换了随机 PIN | 已在 config 固定为 `0215` |
+| 手机显示 PIN 不正确 | 服务重启换了随机 PIN | 看启动日志里的 `[手机] PIN = `；想固定就填 `web.token` |
 | 服务在跑但没反应 | 游标卡住 | 已修复：15 秒无消息自动重对齐 |
 | 译文带解释 | 模型不听话 | 换模型或调低 `temperature` |
 | 某些短语翻错 | 词表没收录 | 往 `glossary.yaml` 加，见效最快 |

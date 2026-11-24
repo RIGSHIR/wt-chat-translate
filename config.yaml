@@ -90,6 +90,7 @@ web:
   enabled: true
   host: "0.0.0.0"     # 0.0.0.0 = 局域网内其他设备可访问
   port: 8765
-  token: "0215"       # 固定 PIN；留空则每次启动随机生成（注意要加引号，否则 YAML 会当成八进制数）
+  token: ""           # 留空 = 每次启动随机生成 4 位 PIN，启动日志里会打印
+                      # 想固定就填字符串，务必加引号，否则 YAML 会当成八进制数
   mode: "clipboard"   # 同 compose.mode
   press_enter: true
