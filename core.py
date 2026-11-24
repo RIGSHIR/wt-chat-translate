@@ -606,11 +606,32 @@ class TranslatorWorker(threading.Thread):
 
 
 # ══════════════════════════════════════════════════════════════════
+def _deep_merge(base: dict, over: dict) -> dict:
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
 def load_config(path: Path) -> dict:
-    cfg = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    path = Path(path)
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # 同目录下的 config.local.yaml 作为本地覆盖，不进版本库
+    local = path.with_name("config.local.yaml")
+    if local.exists():
+        try:
+            over = yaml.safe_load(local.read_text(encoding="utf-8")) or {}
+            if isinstance(over, dict):
+                _deep_merge(cfg, over)
+        except Exception:                # noqa: BLE001
+            pass
     cfg.setdefault("llm", {})
     cfg.setdefault("poll", {})
     cfg.setdefault("queue", {})
     cfg.setdefault("ui", {})
     cfg.setdefault("privacy", {})
+    cfg.setdefault("web", {})
+    cfg.setdefault("compose", {})
     return cfg

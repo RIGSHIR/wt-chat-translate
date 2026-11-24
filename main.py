@@ -201,7 +201,10 @@ def main() -> int:
                                     on_log=lambda s: print(s, flush=True))
             url = web.start()
             print(f"[手机] 浏览器打开 {url}")
-            print(f"[手机] PIN = {web.token}（首次访问需要填）")
+            if web.auth:
+                print(f"[手机] PIN = {web.token}（首次访问需要填）")
+            else:
+                print("[手机] 已关闭 PIN 校验，同网段任何设备都能发")
             print()
         except Exception as e:            # noqa: BLE001
             print(f"[手机] 启动失败：{e}")

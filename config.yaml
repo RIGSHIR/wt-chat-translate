@@ -92,5 +92,6 @@ web:
   port: 8765
   token: ""           # 留空 = 每次启动随机生成 4 位 PIN，启动日志里会打印
                       # 想固定就填字符串，务必加引号，否则 YAML 会当成八进制数
+  auth: true          # false = 不验 PIN，同网段任何设备都能发（仅限可信网络）
   mode: "clipboard"   # 同 compose.mode
   press_enter: true

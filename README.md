@@ -69,6 +69,18 @@ pip install requests pyyaml
 程序启动时会先读环境变量，读不到再去注册表 `HKCU\Environment` 补读，
 所以**开机自启也能拿到**（Explorer 继承的环境块可能是旧的）。
 
+#### 本地覆盖：`config.local.yaml`
+
+想改参数但又不想让改动出现在版本库里，就在 `config.yaml` 旁边建一个
+`config.local.yaml`（已在 `.gitignore` 里），内容会被**深度合并**到主配置之上：
+
+```yaml
+web:
+  auth: false        # 本机不要 PIN，其他键不受影响
+```
+
+这样 `config.yaml` 保持仓库里的默认值，`git status` 永远是干净的。
+
 ### 4. 首次验证
 
 ```powershell
@@ -191,6 +203,7 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | `enabled` | true | 关掉则完全不启网页服务 |
 | `host` / `port` | `0.0.0.0` / 8765 | |
 | `token` | `""` | 留空 = 每次启动随机 4 位；固定值**必须加引号**，否则 YAML 当八进制解析 |
+| `auth` | `true` | `false` = 完全不验 PIN，同网段任何设备都能发 |
 | `mode` | `clipboard` | 见下方 |
 
 ### compose.mode / web.mode

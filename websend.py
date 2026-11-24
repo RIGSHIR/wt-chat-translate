@@ -63,7 +63,7 @@ const pinBox=document.getElementById('pinBox'), pin=document.getElementById('pin
 let busy=false;
 
 let token=localStorage.getItem('wtkey')||'';
-if(!token) pinBox.style.display='block';
+if(__AUTH__===1&&!token) pinBox.style.display='block';
 pin.addEventListener('input',()=>{token=pin.value.trim();localStorage.setItem('wtkey',token);});
 
 const chips=document.getElementById('chips');
@@ -118,6 +118,7 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
     token = ""
+    auth = True                  # False = 不验 PIN，同网段任何人都能发
     send = None                  # 由外部注入：(text) -> (ok, en, msg)
     _lock = threading.Lock()
 
@@ -143,7 +144,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):                        # noqa: N802
         if self.path in ("/", "/index.html"):
-            self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            body = PAGE.replace("__AUTH__", "1" if self.server.auth else "0")
+            self._send(200, body.encode("utf-8"), "text/html; charset=utf-8")
         else:
             self._json({"ok": False, "msg": "not found"}, 404)
 
@@ -157,7 +159,7 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception:                    # noqa: BLE001
             self._json({"ok": False, "msg": "请求格式错误"}, 400)
             return
-        if str(body.get("token", "")) != self.server.token:
+        if self.server.auth and str(body.get("token", "")) != self.server.token:
             self._json({"ok": False, "msg": "PIN 不正确"}, 403)
             return
         text = str(body.get("text", "")).strip()[:200]
@@ -179,7 +181,10 @@ class WebSender:
         self.on_log = on_log
         self.srv: _Server | None = None
         self.thread: threading.Thread | None = None
-        self.token = str(cfg.get("token", "")).strip() or f"{random.randint(1000, 9999)}"
+        self.auth = bool(cfg.get("auth", True))
+        self.token = (str(cfg.get("token", "")).strip() or f"{random.randint(1000, 9999)}")
+        if not self.auth:
+            self.token = ""
 
     # ── 发送流程 ──
     def _do_send(self, zh: str) -> tuple[bool, str, str]:
@@ -220,6 +225,7 @@ class WebSender:
         port = int(self.cfg.get("port", 8765))
         srv = _Server((host, port), _Handler)
         srv.token = self.token
+        srv.auth = self.auth
         srv.send = self._do_send
         self.srv = srv
         self.thread = threading.Thread(target=srv.serve_forever, daemon=True,
