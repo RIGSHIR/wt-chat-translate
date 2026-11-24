@@ -222,7 +222,7 @@ def main() -> int:
             web.stop()
         if overlay is not None:
             overlay.destroy()
-        print(f"\n[统计] {translator.stats} | 已跳过 {poller.skipped} 条")
+        print(f"\n[统计] {translator.stats} | 已跳过 {poller.skipped} 条 | 队列溢出丢弃 {poller.dropped} 条")
     return 0
 
 

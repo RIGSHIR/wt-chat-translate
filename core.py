@@ -388,6 +388,7 @@ class Poller(threading.Thread):
         self._silent_since = time.monotonic()
         self.ok = False
         self.skipped = 0
+        self.dropped = 0            # 队列满被挤掉的最旧消息数
 
     # ── 状态 ──
     def _load_state(self) -> None:
@@ -425,6 +426,9 @@ class Poller(threading.Thread):
 
         游戏重启后 id 会从头计数；若残留一个较大的旧游标，
         接口会永远返回空数组——不报错、不崩溃，只是静默失效。
+
+        replay 只在「首次运行」或「检测到 id 回退」时为 True。
+        普通重启时不能重放——那会把已经看过的旧消息又放一遍。
         """
         data = self._fetch(0)
         self.ok = True
@@ -454,6 +458,7 @@ class Poller(threading.Thread):
                 "_t0": time.monotonic(),
             })
         except Exception:                  # noqa: BLE001  队列满，丢最旧
+            self.dropped += 1
             try:
                 self.q.get_nowait()
                 self.q.put_nowait({
@@ -468,9 +473,11 @@ class Poller(threading.Thread):
 
     # ── 主循环 ──
     def run(self) -> None:
+        # 先判断这是不是首次运行：决定开机探测要不要回放最后 3 条
+        first_run = not self.state_path.exists()
         self._load_state()
         try:
-            self._probe()
+            self._probe(replay=first_run)
         except Exception:                  # noqa: BLE001
             self.ok = False
 
@@ -478,10 +485,13 @@ class Poller(threading.Thread):
             try:
                 data = self._fetch(self.last_id)
                 self.ok = True
-                if data:
+                # 不依赖服务器返回顺序：先筛后排序，避免乱序时静默丢消息
+                pending = [m for m in data if int(m.get("id", 0)) > self.last_id]
+                if pending:
+                    pending.sort(key=lambda m: int(m["id"]))
                     self._silent_since = time.monotonic()
-                    for m in data:
-                        mid = int(m.get("id", 0))
+                    for m in pending:
+                        mid = int(m["id"])
                         if mid <= self.last_id:
                             continue
                         self.last_id = mid
@@ -513,6 +523,7 @@ class Poller(threading.Thread):
 
     def stop(self) -> None:
         self.stop_evt.set()
+        self._save_state(force=True)      # 退出前强制落盘，否则最后 1 秒的游标会丢
 
 
 # ══════════════════════════════════════════════════════════════════
