@@ -236,7 +236,7 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | 手机显示 PIN 不正确 | 服务重启换了随机 PIN | 看启动日志里的 `[手机] PIN = `；想固定就填 `web.token` |
 | 服务在跑但没反应 | 游标卡住 | 已修复：15 秒无消息自动重对齐 |
 | 译文带解释 | 模型不听话 | 换模型或调低 `temperature` |
-| 某些短语翻错 | 词表没收录 | 往 `glossary.yaml` 加，见效最快 |
+| 某些短语翻错 | 模型对缩写理解偏差 | 在 SYSTEM_PROMPT 的缩写示例里补充 |
 
 ---
 
@@ -245,6 +245,6 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 1. **好友私聊 / 机库大厅频道收不到**——走 XMPP，本地接口不提供。
 2. **不能自动打字**——游戏过滤合成按键，实测判定见技术记录。
 3. **发话固定三下按键**——Enter / Ctrl+V / Enter，绕不过去。
-4. **聊天内容会发到云端**（DeepSeek）。介意就把 `privacy.allow_cloud` 设 `false`，那时只剩本地词表。
+4. **聊天内容会发到云端**（DeepSeek）。介意就把 `privacy.allow_cloud` 设 `false`，那时原文直显。
 5. **游戏聊天框会随消息增多向上长**，所以面板底边和它可能偶尔重叠；改 `ui.margin_y` 调整。
 6. 手机端 4 位 PIN 挡不住同网段的暴力尝试，长期用建议换长字符串。

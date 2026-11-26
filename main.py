@@ -7,7 +7,7 @@
     python main.py                 # 置顶窗口
     python main.py --console       # 只打终端，用来验证链路
     python main.py --once          # 抓一次当前聊天就退出（不翻译）
-    python main.py --dry           # 全套流程但不联网（走词表 + 原文）
+    python main.py --dry           # 全套流程但不联网（原文直显）
 
 退出：Ctrl+C，或 Ctrl+F12
 """
@@ -135,12 +135,11 @@ def main() -> int:
 
     print(f"\n[启动] {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    glossary = core.Glossary(HERE / "glossary.yaml")
     translator = core.Translator(cfg)
     in_q: "queue.Queue[dict]" = queue.Queue(maxsize=int(cfg["queue"].get("capacity", 30)))
 
     if not translator._key_of(cfg["llm"]) and cfg["privacy"].get("allow_cloud", True):
-        print("[警告] 未找到 API 密钥，将只走词表。"
+        print("[警告] 未找到 API 密钥，将原文直显。"
               "设置环境变量 WT_LLM_KEY 或在 config.yaml 里填 api_key。")
 
     poller = core.Poller(cfg, in_q, HERE / "state.json")
@@ -176,7 +175,7 @@ def main() -> int:
                 print(fmt(r), flush=True)        # 同时写日志，便于事后回查
             app.enqueue(recs)
 
-    worker = core.TranslatorWorker(cfg, in_q, translator, glossary, on_ready)
+    worker = core.TranslatorWorker(cfg, in_q, translator, on_ready)
 
     poller.start()
     worker.start()
@@ -187,7 +186,7 @@ def main() -> int:
     if cfg["privacy"].get("allow_cloud", True):
         print("[提示] 云端翻译已开启 — 聊天内容会发送到远端服务。")
     else:
-        print("[提示] 云端翻译已关闭 — 只走本地词表，其余原样直显。")
+        print("[提示] 云端翻译已关闭 — 原文直显。")
     print()
 
     if cfg["privacy"].get("allow_cloud", True) and translator._key_of(cfg["llm"]):

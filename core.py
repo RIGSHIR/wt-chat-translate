@@ -23,14 +23,14 @@ WT_CHAT_URL = "http://127.0.0.1:8111/gamechat"
 
 # ── 字符清洗表 ──────────────────────────────────────────────────────
 # 实测：接口返回的每个汉字之间都嵌了 U+200B，不剥掉则「友军」≠「友军」，
-# 词表匹配、CJK 判定、mode 映射全部失效。
+# CJK 判定、mode 映射全部失效。
 _ZERO_WIDTH = {cp: None for cp in (0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD, 0x180E)}
 _BIDI = {cp: None for cp in (0x200E, 0x200F, 0x202A, 0x202B, 0x202C,
                              0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)}
 _TAG_RE = re.compile(r"<[^<>]{1,60}>")          # 游戏内富文本 <color=#FF96966E>
 _CJK_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]")
 _NOISE_RE = re.compile(r"^[\W_]+$")
-# 纯笑声/表情：不必翻译（lol/lmao 不在此列，它们归词表处理）
+# 纯笑声/表情：不必翻译（lol/lmao 这类有语义的缩写交给模型）
 _LAUGH_RE = re.compile(r"^(?:[xX]+[dD]+|[hH]{3,}|[)）]{2,}|[\^]{2,})$")
 
 # 实测：mode 是本地化字符串，不是 All/Team 枚举
@@ -79,7 +79,7 @@ def is_cjk(s: str) -> bool:
 
 
 def should_skip(text: str) -> bool:
-    """返回 True 表示这条不需要翻译。注意：必须在词表替换之前调用。"""
+    """返回 True 表示这条不需要翻译（无信息量或已是中文）。"""
     t = text.strip()
     if not t:
         return True
@@ -92,36 +92,6 @@ def should_skip(text: str) -> bool:
     if len(re.sub(r"[^\w]", "", t, flags=re.UNICODE)) <= 1:   # "+1"、"6"、"D"
         return True
     return False
-
-
-# ══════════════════════════════════════════════════════════════════
-# 词表
-# ══════════════════════════════════════════════════════════════════
-class Glossary:
-    def __init__(self, path: Path):
-        data = {}
-        try:
-            data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
-        except FileNotFoundError:
-            pass
-        self.map: dict[str, str] = {k.strip().lower(): v
-                                    for k, v in data.items()
-                                    if isinstance(k, str) and isinstance(v, str)}
-        if self.map:
-            keys = sorted(self.map, key=len, reverse=True)
-            body = "|".join(re.escape(k) for k in keys)
-            self._re = re.compile(rf"(?<![a-z0-9])({body})(?![a-z0-9])", re.IGNORECASE)
-        else:
-            self._re = None
-
-    def apply(self, text: str) -> tuple[str, bool]:
-        """返回 (替换后的文本, 是否整句都被词表覆盖)"""
-        if not self._re:
-            return text, False
-        out = self._re.sub(lambda m: self.map.get(m.group(0).lower(), m.group(0)), text)
-        tokens = re.findall(r"[a-z0-9']+", text.lower())
-        covered = bool(tokens) and all(t in self.map for t in tokens)
-        return out, covered
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -607,42 +577,31 @@ class Poller(threading.Thread):
 # 翻译工作线程（攒批）
 # ══════════════════════════════════════════════════════════════════
 class TranslatorWorker(threading.Thread):
-    def __init__(self, cfg: dict, in_queue, translator: Translator, glossary: Glossary,
+    def __init__(self, cfg: dict, in_queue, translator: Translator,
                  on_ready, on_log=print):
         super().__init__(daemon=True, name="translator")
         self.cfg = cfg["queue"]
         self.q = in_queue
         self.tr = translator
-        self.gl = glossary
         self.on_ready = on_ready
         self.on_log = on_log
         self.stop_evt = threading.Event()
 
     def _prepare(self, rec: dict) -> dict:
-        """词表预替换；整句被词表覆盖则直接给答案，不花 token。"""
-        text, covered = self.gl.apply(restore_homoglyph(rec["src"]))
-        rec["prepared"] = text
-        rec["glossed"] = covered
+        """只做字符级归一化（同形字还原），不做任何查表替换，忠实交给模型。"""
+        rec["prepared"] = restore_homoglyph(rec["src"])
         return rec
 
     def _flush(self, pending: list[dict]) -> None:
         if not pending:
             return
-        todo = [r for r in pending if not r.get("glossed")]
-        out: list[dict] = []
-
-        for r in pending:
-            if r.get("glossed"):
-                out.append({**r, "dst": r["prepared"]})
-        if todo:
-            texts = [r["prepared"] for r in todo]
-            try:
-                zh = self.tr.translate_batch(texts)
-            except Exception as e:                  # noqa: BLE001
-                self.on_log(f"[翻译失败] {e}")
-                zh = texts
-            for r, z in zip(todo, zh):
-                out.append({**r, "dst": z})
+        texts = [r["prepared"] for r in pending]
+        try:
+            zh = self.tr.translate_batch(texts)
+        except Exception as e:                      # noqa: BLE001
+            self.on_log(f"[翻译失败] {e}")
+            zh = texts
+        out = [{**r, "dst": z} for r, z in zip(pending, zh)]
         if out:
             self.on_ready(out)
 
