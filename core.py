@@ -392,11 +392,14 @@ class KeepAlive(threading.Thread):
     def run(self) -> None:
         last_ping = 0.0
         was = False
+        first = True
         while not self.stop_evt.is_set():
             now_battle = self._battle_now()
             if now_battle and not was:
                 self.on_log("[保活] 进入对局，预热翻译通道")
-                if self.on_battle_start:
+                # 首次检测只建立基线：程序可能是在对局中途启动的，
+                # 那不是「新对局」，不该清掉本局已有的消息
+                if self.on_battle_start and not first:
                     try:
                         self.on_battle_start()
                     except Exception:          # noqa: BLE001
@@ -411,6 +414,7 @@ class KeepAlive(threading.Thread):
                 else:
                     last_ping = time.monotonic() - self.interval + 15  # 失败 15s 后重试
             was = now_battle
+            first = False
             self.in_battle = now_battle
             self.stop_evt.wait(self.check)
 
