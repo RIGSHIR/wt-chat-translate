@@ -159,9 +159,10 @@ def main() -> int:
 
         if cfg.get("compose", {}).get("enabled", True):
             import composer as cp
+            _ctx_max = int(cfg.get("context", {}).get("max_msgs", 0))
             comp = cp.Composer(app.fg, translator, cfg.get("compose", {}),
                                scale=app.scale,
-                               context_provider=lambda: core.build_context(poller))
+                               context_provider=lambda: core.build_context(poller, _ctx_max))
 
             def _sent(zh: str, en: str) -> None:
                 app.root.after(0, lambda: app.push([
@@ -213,7 +214,8 @@ def main() -> int:
             import websend
             web = websend.WebSender(translator, cfg.get("web", {}),
                                     on_log=lambda s: print(s, flush=True),
-                                    context_provider=lambda: core.build_context(poller))
+                                    context_provider=lambda: core.build_context(
+                                        poller, int(cfg.get("context", {}).get("max_msgs", 0))))
             url = web.start()
             print(f"[手机] 浏览器打开 {url}")
             if web.auth:

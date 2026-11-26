@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections import deque
 import threading
 import time
 import unicodedata
@@ -139,7 +138,7 @@ def _parse_numbered(out: str, n: int) -> list[str] | None:
 
 ZH2EN_PROMPT = (
     "你在玩《战争雷霆》，需要把一句话意思用英文发到游戏聊天里。\n"
-    "输入可能附带[上下文]（当前战术态势与最近聊天），仅用于理解语境、\n"
+    "输入可能附带[上下文]（当前战术态势与本局全部聊天），仅用于理解语境、\n"
     "让译文贴合实际战况（如代词指代、点位、敌我关系）；只翻译[原文]那句，\n"
     "不要把上下文内容译出来。\n"
     "要求：\n"
@@ -324,7 +323,7 @@ class Translator:
     def to_english(self, text: str, context: str | None = None) -> str | None:
         """中文 → 英文，用于替玩家发送。失败返回 None。
 
-        context：当前对局的战术态势与最近聊天，帮助译文贴合实际战况。
+        context：当前对局的战术态势与本局全部聊天，帮助译文贴合实际战况。
         优先用 llm.zh2en 单独的通道（FLASH + 关思考），失败再回落到主通道。
         """
         text = text.strip()
@@ -350,8 +349,9 @@ class Translator:
 # ══════════════════════════════════════════════════════════════════
 # 对局上下文：供中译英参考，让译文贴合实际战况
 # ══════════════════════════════════════════════════════════════════
-def build_context(poller, max_msgs: int = 8) -> str | None:
-    """拼一段简短上下文：战术态势（/state + /mission）+ 当前对局最近聊天。
+def build_context(poller, max_msgs: int = 0) -> str | None:
+    """拼上下文：战术态势（/state + /mission）+ 当前对局聊天。
+    max_msgs=0 表示整局全部消息；>0 则只取最近 N 条。
     任何一部分拿不到都不影响其余部分；全部拿不到则返回 None。"""
     parts: list[str] = []
     sess = requests.Session()      # 独立会话，不与轮询线程共享
@@ -377,10 +377,12 @@ def build_context(poller, max_msgs: int = 8) -> str | None:
             parts.append("任务: " + "；".join(objs[:3]))
     except Exception:                      # noqa: BLE001
         pass
-    msgs = list(poller.recent)[-max_msgs:]
+    msgs = list(poller.recent)
+    if max_msgs > 0:
+        msgs = msgs[-max_msgs:]
     if msgs:
         lines = [f"{m['sender']}: {m['msg']}" for m in msgs]
-        parts.append("最近聊天:\n" + "\n".join(lines))
+        parts.append(f"本局聊天（{len(msgs)} 条）:\n" + "\n".join(lines))
     return "\n".join(parts) if parts else None
 
 
@@ -495,7 +497,7 @@ class Poller(threading.Thread):
         self.skipped = 0
         self.dropped = 0            # 队列满被挤掉的最旧消息数
         self.align_evt = threading.Event()   # 置位后游标对齐到最新（不回放）
-        self.recent: deque = deque(maxlen=10)   # 当前对局最近消息（供中译英上下文）
+        self.recent: list = []   # 当前对局全部消息（供中译英上下文），新对局清空
 
     # ── 状态 ──
     def _load_state(self) -> None:
