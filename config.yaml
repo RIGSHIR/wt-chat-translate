@@ -78,7 +78,7 @@ privacy:
 keepalive:
   enabled: true
   interval: 90        # 对局内每隔多少秒 ping 一次（每次约 10 token）
-  check: 5            # 检测对局状态的间隔（本地请求，零成本）
+  check: 2            # 检测对局状态的间隔（本地请求，零成本）；也决定新对局清面板的响应速度
 
 # 中译英代发：按 Ctrl+F9 弹出输入框，回车后翻成英文并代你打出去
 compose:

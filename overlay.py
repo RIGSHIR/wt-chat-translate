@@ -322,6 +322,18 @@ class Overlay:
         self.fg.attributes("-alpha", 1.0)
         self._raise_fg()
 
+    def clear(self) -> None:
+        """新对局开始时清空面板（任意线程可调）。"""
+        self.bg.after(0, self._clear_now)
+
+    def _clear_now(self) -> None:
+        self.records = []
+        for it in self._rows:
+            it["row"].destroy()
+        self._rows = []
+        self._band.configure(height=0)
+        self._auto_hide()
+
     def _auto_hide(self) -> None:
         self._hidden = True
         self.bg.attributes("-alpha", 0.0)

@@ -192,11 +192,18 @@ def main() -> int:
     if cfg["privacy"].get("allow_cloud", True) and translator._key_of(cfg["llm"]):
         threading.Thread(target=translator.warmup, daemon=True).start()
 
+    def _on_battle_start() -> None:
+        # 只显示当前对局：跳过旧对局积压 + 清空面板
+        poller.align_evt.set()
+        if overlay is not None:
+            overlay.clear()
+        print("[对局] 新对局开始，已清空旧消息", flush=True)
+
     ka = None
     kc = cfg.get("keepalive", {})
-    if kc.get("enabled", True) and cfg["privacy"].get("allow_cloud", True) \
-            and translator._key_of(cfg["llm"]):
-        ka = core.KeepAlive(translator, kc, on_log=lambda s: print(s, flush=True))
+    if kc.get("enabled", True):
+        ka = core.KeepAlive(translator, kc, on_log=lambda s: print(s, flush=True),
+                            on_battle_start=_on_battle_start)
         ka.start()
 
     web = None

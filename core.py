@@ -352,11 +352,13 @@ class KeepAlive(threading.Thread):
     进入对局立即预热一次，之后每 interval 秒 ping 一次 zh2en 通道；
     不在对局则完全静默，不产生任何云端请求。"""
 
-    def __init__(self, translator: "Translator", cfg: dict, on_log=print):
+    def __init__(self, translator: "Translator", cfg: dict, on_log=print,
+                 on_battle_start=None):
         super().__init__(daemon=True, name="keepalive")
         self.tr = translator
         self.cfg = cfg
         self.on_log = on_log
+        self.on_battle_start = on_battle_start   # 进入新对局时回调（清面板/对齐游标）
         self.stop_evt = threading.Event()
         self.interval = float(cfg.get("interval", 90))
         self.check = float(cfg.get("check", 5))
@@ -373,8 +375,12 @@ class KeepAlive(threading.Thread):
             return False
 
     def _ping(self) -> bool:
+        # 保活线程现在常驻（对局检测还要驱动清面板），
+        # 但云端预热必须尊重隐私开关与密钥存在性
+        if not self.tr.privacy.get("allow_cloud", True):
+            return False
         provs = self.tr._zh2en_providers()
-        if not provs:
+        if not provs or not self.tr._key_of(provs[0]):
             return False
         try:
             self.tr._post(provs[0], "ok", 1, system=ZH2EN_PROMPT)
@@ -390,6 +396,11 @@ class KeepAlive(threading.Thread):
             now_battle = self._battle_now()
             if now_battle and not was:
                 self.on_log("[保活] 进入对局，预热翻译通道")
+                if self.on_battle_start:
+                    try:
+                        self.on_battle_start()
+                    except Exception:          # noqa: BLE001
+                        pass
                 self._ping()
                 last_ping = time.monotonic()
             elif not now_battle and was:
@@ -436,6 +447,7 @@ class Poller(threading.Thread):
         self.ok = False
         self.skipped = 0
         self.dropped = 0            # 队列满被挤掉的最旧消息数
+        self.align_evt = threading.Event()   # 置位后游标对齐到最新（不回放）
 
     # ── 状态 ──
     def _load_state(self) -> None:
@@ -519,16 +531,30 @@ class Poller(threading.Thread):
                 pass
 
     # ── 主循环 ──
+    def _battle_active(self) -> bool:
+        try:
+            r = self._sess.get(WT_STATE_URL, timeout=1.5)
+            return bool(json.loads(r.content.decode("utf-8")).get("valid"))
+        except Exception:                  # noqa: BLE001
+            return False
+
     def run(self) -> None:
-        # 先判断这是不是首次运行：决定开机探测要不要回放最后 3 条
+        # 首次运行且正在对局中才回放最后 3 条当上下文；
+        # 机库里启动不回放——那是上一局的残留消息
         first_run = not self.state_path.exists()
         self._load_state()
         try:
-            self._probe(replay=first_run)
+            self._probe(replay=first_run and self._battle_active())
         except Exception:                  # noqa: BLE001
             self.ok = False
 
         while not self.stop_evt.is_set():
+            if self.align_evt.is_set():
+                self.align_evt.clear()
+                try:
+                    self._probe(replay=False)   # 新对局：跳过旧积压，只对游标
+                except Exception:              # noqa: BLE001
+                    pass
             try:
                 data = self._fetch(self.last_id)
                 self.ok = True
