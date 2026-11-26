@@ -73,6 +73,13 @@ privacy:
   # 云端翻译意味着聊天内容会离开本机。设为 false 则只用词表、不联网。
   allow_cloud: true
 
+# 对局保活：在对局中时定期预热中译英通道，避免临时发言撞冷启动（实测 3.7–8s）
+# 不在对局则完全静默，不产生任何云端请求
+keepalive:
+  enabled: true
+  interval: 90        # 对局内每隔多少秒 ping 一次（每次约 10 token）
+  check: 5            # 检测对局状态的间隔（本地请求，零成本）
+
 # 中译英代发：按 Ctrl+F9 弹出输入框，回车后翻成英文并代你打出去
 compose:
   enabled: true

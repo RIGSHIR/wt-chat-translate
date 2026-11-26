@@ -193,6 +193,13 @@ def main() -> int:
     if cfg["privacy"].get("allow_cloud", True) and translator._key_of(cfg["llm"]):
         threading.Thread(target=translator.warmup, daemon=True).start()
 
+    ka = None
+    kc = cfg.get("keepalive", {})
+    if kc.get("enabled", True) and cfg["privacy"].get("allow_cloud", True) \
+            and translator._key_of(cfg["llm"]):
+        ka = core.KeepAlive(translator, kc, on_log=lambda s: print(s, flush=True))
+        ka.start()
+
     web = None
     if cfg.get("web", {}).get("enabled", False):
         try:
@@ -221,6 +228,8 @@ def main() -> int:
     finally:
         poller.stop()
         worker.stop()
+        if ka is not None:
+            ka.stop()
         if web is not None:
             web.stop()
         if overlay is not None:

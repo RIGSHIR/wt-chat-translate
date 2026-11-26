@@ -361,6 +361,72 @@ class Translator:
 
 
 # ══════════════════════════════════════════════════════════════════
+# 对局保活：在对局中时定期预热翻译通道，避免临时发言时撞冷启动
+# ══════════════════════════════════════════════════════════════════
+WT_STATE_URL = "http://127.0.0.1:8111/state"
+
+
+class KeepAlive(threading.Thread):
+    """检测对局状态（/state 的 valid 字段，机库为 false），
+    进入对局立即预热一次，之后每 interval 秒 ping 一次 zh2en 通道；
+    不在对局则完全静默，不产生任何云端请求。"""
+
+    def __init__(self, translator: "Translator", cfg: dict, on_log=print):
+        super().__init__(daemon=True, name="keepalive")
+        self.tr = translator
+        self.cfg = cfg
+        self.on_log = on_log
+        self.stop_evt = threading.Event()
+        self.interval = float(cfg.get("interval", 90))
+        self.check = float(cfg.get("check", 5))
+        self.pings = 0
+        self.in_battle = False
+        self._sess = requests.Session()
+        self._sess.trust_env = False
+
+    def _battle_now(self) -> bool:
+        try:
+            r = self._sess.get(WT_STATE_URL, timeout=1.5)
+            return bool(json.loads(r.content.decode("utf-8")).get("valid"))
+        except Exception:                  # noqa: BLE001
+            return False
+
+    def _ping(self) -> bool:
+        provs = self.tr._zh2en_providers()
+        if not provs:
+            return False
+        try:
+            self.tr._post(provs[0], "ok", 1, system=ZH2EN_PROMPT)
+            self.pings += 1
+            return True
+        except Exception:                  # noqa: BLE001
+            return False
+
+    def run(self) -> None:
+        last_ping = 0.0
+        was = False
+        while not self.stop_evt.is_set():
+            now_battle = self._battle_now()
+            if now_battle and not was:
+                self.on_log("[保活] 进入对局，预热翻译通道")
+                self._ping()
+                last_ping = time.monotonic()
+            elif not now_battle and was:
+                self.on_log("[保活] 离开对局，暂停（不再产生云端请求）")
+            elif now_battle and time.monotonic() - last_ping >= self.interval:
+                if self._ping():
+                    last_ping = time.monotonic()
+                else:
+                    last_ping = time.monotonic() - self.interval + 15  # 失败 15s 后重试
+            was = now_battle
+            self.in_battle = now_battle
+            self.stop_evt.wait(self.check)
+
+    def stop(self) -> None:
+        self.stop_evt.set()
+
+
+# ══════════════════════════════════════════════════════════════════
 # 采集
 # ══════════════════════════════════════════════════════════════════
 class Poller(threading.Thread):

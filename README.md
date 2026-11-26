@@ -206,6 +206,17 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | `auth` | `true` | `false` = 完全不验 PIN，同网段任何设备都能发 |
 | `mode` | `clipboard` | 见下方 |
 
+### keepalive —— 对局保活
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `enabled` | true | 在对局中时定期预热中译英通道，避免临时发言撞冷启动（实测 3.7–8s）|
+| `interval` | 90 | 对局内每隔多少秒 ping 一次，每次约 10 token |
+| `check` | 5 | 检测对局状态的间隔（本地 /state，零成本）|
+
+对局判定用 `/state` 的 `valid` 字段（机库为 false）。进入对局立即预热一次；
+离开对局完全静默，不产生任何云端请求。
+
 ### compose.mode / web.mode
 
 - `clipboard`（默认）：译好放剪贴板 + 自动切回游戏，你按三下键
