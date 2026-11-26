@@ -160,7 +160,8 @@ def main() -> int:
         if cfg.get("compose", {}).get("enabled", True):
             import composer as cp
             comp = cp.Composer(app.fg, translator, cfg.get("compose", {}),
-                               scale=app.scale)
+                               scale=app.scale,
+                               context_provider=lambda: core.build_context(poller))
 
             def _sent(zh: str, en: str) -> None:
                 app.root.after(0, lambda: app.push([
@@ -211,7 +212,8 @@ def main() -> int:
         try:
             import websend
             web = websend.WebSender(translator, cfg.get("web", {}),
-                                    on_log=lambda s: print(s, flush=True))
+                                    on_log=lambda s: print(s, flush=True),
+                                    context_provider=lambda: core.build_context(poller))
             url = web.start()
             print(f"[手机] 浏览器打开 {url}")
             if web.auth:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import deque
 import threading
 import time
 import unicodedata
@@ -138,6 +139,9 @@ def _parse_numbered(out: str, n: int) -> list[str] | None:
 
 ZH2EN_PROMPT = (
     "你在玩《战争雷霆》，需要把一句话意思用英文发到游戏聊天里。\n"
+    "输入可能附带[上下文]（当前战术态势与最近聊天），仅用于理解语境、\n"
+    "让译文贴合实际战况（如代词指代、点位、敌我关系）；只翻译[原文]那句，\n"
+    "不要把上下文内容译出来。\n"
     "要求：\n"
     "- 地道、口语、简短，像欧美玩家随手打的，不要书面语\n"
     "- 不保留中文，全部用英文\n"
@@ -317,18 +321,20 @@ class Translator:
         except Exception:                                # noqa: BLE001
             pass
 
-    def to_english(self, text: str) -> str | None:
+    def to_english(self, text: str, context: str | None = None) -> str | None:
         """中文 → 英文，用于替玩家发送。失败返回 None。
 
+        context：当前对局的战术态势与最近聊天，帮助译文贴合实际战况。
         优先用 llm.zh2en 单独的通道（FLASH + 关思考），失败再回落到主通道。
         """
         text = text.strip()
         if not text:
             return None
+        user = f"[上下文]\n{context}\n[原文]\n{text}" if context else text
         errors = []
         for prov in self._zh2en_providers():
             try:
-                out = self._post(prov, text, 1, system=ZH2EN_PROMPT)
+                out = self._post(prov, user, 1, system=ZH2EN_PROMPT)
             except Exception as e:                       # noqa: BLE001
                 errors.append(str(e))
                 continue
@@ -339,6 +345,43 @@ class Translator:
         if errors:
             raise RuntimeError(errors[-1])
         return None
+
+
+# ══════════════════════════════════════════════════════════════════
+# 对局上下文：供中译英参考，让译文贴合实际战况
+# ══════════════════════════════════════════════════════════════════
+def build_context(poller, max_msgs: int = 8) -> str | None:
+    """拼一段简短上下文：战术态势（/state + /mission）+ 当前对局最近聊天。
+    任何一部分拿不到都不影响其余部分；全部拿不到则返回 None。"""
+    parts: list[str] = []
+    sess = requests.Session()      # 独立会话，不与轮询线程共享
+    sess.trust_env = False
+    try:
+        st = json.loads(sess.get(WT_STATE_URL, timeout=1.0).content.decode("utf-8"))
+        if st.get("valid"):
+            bits = []
+            for key, label in (("H, m", "高度"), ("TAS, km/h", "速度"),
+                               ("M", "马赫"), ("Vy, m/s", "升降率")):
+                if key in st:
+                    bits.append(f"{label}{st[key]}")
+            if bits:
+                parts.append("本机: " + " ".join(bits))
+    except Exception:                      # noqa: BLE001
+        pass
+    try:
+        mi = json.loads(sess.get("http://127.0.0.1:8111/mission.json",
+                                 timeout=1.0).content.decode("utf-8"))
+        objs = [normalize(o.get("text", "")) for o in mi.get("objectives", [])
+                if o.get("primary") and o.get("status") in ("in_progress", "delayed")]
+        if objs:
+            parts.append("任务: " + "；".join(objs[:3]))
+    except Exception:                      # noqa: BLE001
+        pass
+    msgs = list(poller.recent)[-max_msgs:]
+    if msgs:
+        lines = [f"{m['sender']}: {m['msg']}" for m in msgs]
+        parts.append("最近聊天:\n" + "\n".join(lines))
+    return "\n".join(parts) if parts else None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -452,6 +495,7 @@ class Poller(threading.Thread):
         self.skipped = 0
         self.dropped = 0            # 队列满被挤掉的最旧消息数
         self.align_evt = threading.Event()   # 置位后游标对齐到最新（不回放）
+        self.recent: deque = deque(maxlen=10)   # 当前对局最近消息（供中译英上下文）
 
     # ── 状态 ──
     def _load_state(self) -> None:
@@ -497,6 +541,8 @@ class Poller(threading.Thread):
         self.ok = True
         newest = max((int(m["id"]) for m in data), default=0)
         reset = newest < self.last_id
+        if reset:
+            self.recent.clear()
         self.last_id = newest
         if reset or replay:
             for m in data[-3:]:            # 只回放最后 3 条，不刷屏
@@ -507,6 +553,12 @@ class Poller(threading.Thread):
     # ── 分发 ──
     def _emit(self, m: dict) -> None:
         msg = normalize(m.get("msg", ""))
+        if msg:
+            self.recent.append({
+                "sender": normalize(str(m.get("sender", "")))[:24] or "?",
+                "mode": map_mode(m.get("mode", "")),
+                "msg": msg[:120],
+            })
         if should_skip(msg):
             self.skipped += 1
             return
@@ -555,6 +607,7 @@ class Poller(threading.Thread):
         while not self.stop_evt.is_set():
             if self.align_evt.is_set():
                 self.align_evt.clear()
+                self.recent.clear()            # 新对局：上下文也重新开始
                 try:
                     self._probe(replay=False)   # 新对局：跳过旧积压，只对游标
                 except Exception:              # noqa: BLE001

@@ -171,13 +171,15 @@ class Composer:
     """按热键弹出的小输入框：中文进去，英文发到游戏里。"""
 
     def __init__(self, master: tk.Misc, translator, cfg: dict,
-                 on_sent=None, on_status=None, scale: float = 1.0):
+                 on_sent=None, on_status=None, scale: float = 1.0,
+                 context_provider=None):
         self.master = master
         self.tr = translator
         self.cfg = cfg
         self.on_sent = on_sent
         self.on_status = on_status
         self.scale = scale
+        self.context_provider = context_provider   # 返回当前对局上下文文本
         self.busy = False
 
         self.top = tk.Toplevel(master)
@@ -256,7 +258,13 @@ class Composer:
 
     def _work(self, zh: str) -> None:
         try:
-            en = self.tr.to_english(zh)
+            ctx = None
+            if self.context_provider:
+                try:
+                    ctx = self.context_provider()
+                except Exception:              # noqa: BLE001
+                    pass
+            en = self.tr.to_english(zh, context=ctx)
             if not en:
                 self._report("翻译失败，未发送", ok=False)
                 return

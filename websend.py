@@ -175,10 +175,11 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class WebSender:
-    def __init__(self, translator, cfg: dict, on_log=print):
+    def __init__(self, translator, cfg: dict, on_log=print, context_provider=None):
         self.tr = translator
         self.cfg = cfg
         self.on_log = on_log
+        self.context_provider = context_provider   # 返回当前对局上下文文本
         self.srv: _Server | None = None
         self.thread: threading.Thread | None = None
         self.auth = bool(cfg.get("auth", True))
@@ -189,8 +190,14 @@ class WebSender:
     # ── 发送流程 ──
     def _do_send(self, zh: str) -> tuple[bool, str, str]:
         with _Server._lock:                  # 串行，避免两条消息交错
+            ctx = None
+            if self.context_provider:
+                try:
+                    ctx = self.context_provider()
+                except Exception:              # noqa: BLE001
+                    pass
             try:
-                en = self.tr.to_english(zh)
+                en = self.tr.to_english(zh, context=ctx)
             except Exception as e:           # noqa: BLE001
                 return False, "", f"翻译失败：{e}"
             if not en:

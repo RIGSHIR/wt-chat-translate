@@ -206,6 +206,17 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | `auth` | `true` | `false` = 完全不验 PIN，同网段任何设备都能发 |
 | `mode` | `clipboard` | 见下方 |
 
+### 中译英的对局上下文
+
+发话时会自动附带一段当前对局上下文，让译文贴合实际战况：
+
+- **战术态势**：本机高度/速度/马赫/升降率（`/state`）+ 进行中的任务目标（`/mission.json`）
+- **最近聊天**：当前对局最近 8 条消息（含中文战术播报），新对局开始时自动清空
+
+上下文只用于理解语境（代词指代、点位、敌我关系），不会被译出来。
+实测：「小心你后面那两架」在有队友报尾上下文时译为 `watch your six, two behind you`，
+无上下文时只有泛泛的 `watch the two behind you`。额外延迟约 0.1–0.3s。
+
 ### keepalive —— 对局保活
 
 | 键 | 默认 | 说明 |
