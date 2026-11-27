@@ -206,6 +206,23 @@ New-NetFirewallRule -DisplayName "wt-chat-translate-8765" `
 | `auth` | `true` | `false` = 完全不验 PIN，同网段任何设备都能发 |
 | `mode` | `clipboard` | 见下方 |
 
+### 网址分发（云服务器仅作入口）
+
+手机不必记局域网 IP：电脑端每 30 秒把当前发送页地址上传到云服务器的静态目录，
+手机访问云端入口页拿地址，**实际翻译/发送通信仍走局域网**。
+
+```
+手机 → http://<云服务器>/wt/   （静态页，每 8s 拉 url.json）
+        ↓ 点击「进入发送页」
+      http://<局域网IP>:8765/   （真正的发送页）
+```
+
+- 云端只需静态托管空间（nginx 即可），不跑任何服务进程；
+- 电脑端用系统自带 `scp` 上传 `url.json`（含时间戳）与 `index.html`；
+- 入口页按时间戳判断在线（90 秒无心跳即置灰）；
+- 配置在 `dispatch:` 段（host/user/key_path/remote_dir/public_base/interval）。
+  个人服务器信息建议放 `config.local.yaml`，不进版本库。
+
 ### 中译英的对局上下文
 
 发话时会自动附带一段当前对局上下文，让译文贴合实际战况：

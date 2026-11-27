@@ -182,6 +182,7 @@ class WebSender:
         self.context_provider = context_provider   # 返回当前对局上下文文本
         self.srv: _Server | None = None
         self.thread: threading.Thread | None = None
+        self.public_url: str | None = None
         self.auth = bool(cfg.get("auth", True))
         self.token = (str(cfg.get("token", "")).strip() or f"{random.randint(1000, 9999)}")
         if not self.auth:
@@ -238,7 +239,8 @@ class WebSender:
         self.thread = threading.Thread(target=srv.serve_forever, daemon=True,
                                        name="websend")
         self.thread.start()
-        return f"http://{lan_ip()}:{port}/"
+        self.public_url = f"http://{lan_ip()}:{port}/"
+        return self.public_url
 
     def stop(self) -> None:
         if self.srv:

@@ -227,6 +227,20 @@ def main() -> int:
             print(f"[手机] 启动失败：{e}")
             web = None
 
+    disp = None
+    dc = cfg.get("dispatch", {})
+    if dc.get("enabled") and web is not None:
+        try:
+            import dispatch
+            disp = dispatch.Dispatcher(dc, lambda: web.public_url,
+                                       on_log=lambda s: print(s, flush=True))
+            disp.start()
+            base = dc.get("public_base", "").rstrip("/")
+            print(f"[分发] 手机入口（云端）: {base}/")
+        except Exception as e:            # noqa: BLE001
+            print(f"[分发] 启动失败：{e}")
+            disp = None
+
     try:
         if overlay is None:
             while poller.is_alive() and worker.is_alive():
@@ -240,6 +254,8 @@ def main() -> int:
         worker.stop()
         if ka is not None:
             ka.stop()
+        if disp is not None:
+            disp.stop()
         if web is not None:
             web.stop()
         if overlay is not None:

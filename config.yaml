@@ -73,6 +73,18 @@ privacy:
   # 云端翻译意味着聊天内容会离开本机。设为 false 则不联网，原文直显。
   allow_cloud: true
 
+# 网址分发：把局域网发送页地址上传到云服务器，手机从云端页拿地址
+# 云端只需静态托管空间；实际通信仍走局域网
+dispatch:
+  enabled: false
+  host: ""            # 云服务器地址
+  port: 22
+  user: ""            # SSH 用户名
+  key_path: ""        # 私钥路径（留空则用 ssh 默认密钥/代理）
+  remote_dir: ""      # 静态目录，如 /var/www/html/wt
+  public_base: ""     # 手机访问的云端地址，如 https://example.com/wt
+  interval: 30        # 心跳间隔（秒），刷新在线状态
+
 # 中译英上下文
 context:
   max_msgs: 0         # 0 = 发送整局全部聊天；>0 = 只发最近 N 条（控制 token 与延迟）
