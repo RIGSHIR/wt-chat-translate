@@ -12,10 +12,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import threading
 import time
 from pathlib import Path
+
+# pythonw 无控制台；控制台子进程（scp/ssh）默认会新建可见黑窗，必须压掉
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 HERE = Path(__file__).resolve().parent
 
@@ -47,7 +51,8 @@ class Dispatcher(threading.Thread):
             cmd += ["-i", str(Path(key).expanduser())]
         cmd += [str(local), target]
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                               creationflags=_NO_WINDOW)
             if r.returncode != 0:
                 self.on_log(f"[分发] scp 失败: {(r.stderr or '').strip()[:160]}")
                 return False
